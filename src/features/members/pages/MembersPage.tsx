@@ -14,7 +14,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Pencil, Trash2, Users } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, Camera } from "lucide-react";
 import { tauriInvoke, Commands } from "@/lib/tauri";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/Button";
@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/Dialog";
 import { cn } from "@/lib/utils";
 import type { MemberStatus } from "@/types";
+import { FaceRegistrationDialog } from "@/features/hardware/components/FaceRegistrationDialog";
 
 /* ── Types ── */
 
@@ -209,6 +210,7 @@ export function MembersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editMember, setEditMember] = useState<MemberRow | undefined>();
   const [deleteMember, setDeleteMember] = useState<MemberRow | undefined>();
+  const [faceRegisterMember, setFaceRegisterMember] = useState<MemberRow | undefined>();
 
   const PAGE_SIZE = 20;
 
@@ -289,6 +291,10 @@ export function MembersPage() {
       cellClassName: "w-20",
       render: (_, row) => (
         <div className="flex items-center gap-1 justify-end">
+          <Button variant="ghost" size="icon" onClick={() => setFaceRegisterMember(row)} aria-label="Register Face"
+            className="text-[oklch(0.50_0.27_270)] hover:bg-[oklch(0.50_0.27_270)/0.08]">
+            <Camera size={13} />
+          </Button>
           <Button variant="ghost" size="icon" onClick={() => setEditMember(row)} aria-label="Edit">
             <Pencil size={13} />
           </Button>
@@ -366,6 +372,14 @@ export function MembersPage() {
         onConfirm={() => deleteMutation.mutate(deleteMember!.id)}
         isLoading={deleteMutation.isPending}
       />
+      {faceRegisterMember && (
+        <FaceRegistrationDialog
+          memberId={faceRegisterMember.id}
+          open={Boolean(faceRegisterMember)}
+          onClose={() => setFaceRegisterMember(undefined)}
+          onSuccess={() => void qc.invalidateQueries({ queryKey: ["members"] })}
+        />
+      )}
     </div>
   );
 }

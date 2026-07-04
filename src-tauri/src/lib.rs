@@ -14,14 +14,17 @@ mod state;
 use services::database::initialize_database;
 use services::seed;
 use state::{DbState, SessionState};
+
+pub struct PythonProcess(pub std::sync::Mutex<Option<std::process::Child>>);
 use commands::auth::{auth_login, auth_logout, auth_get_session, auth_change_password};
 use commands::users::{roles_list, users_list, users_create, users_update};
-use commands::members::{members_list, members_get, members_create, members_update, members_delete, dashboard_stats};
+use commands::members::{members_list, members_get, members_create, members_update, members_delete, members_set_embedding, dashboard_stats};
 use commands::license::{license_get_fingerprint, license_get, license_activate};
 use commands::plans::{plans_list, plans_create, plans_update};
 use commands::subscriptions::{subscriptions_list, subscriptions_create, subscriptions_cancel};
 use commands::rfids::{rfid_assign, rfid_revoke, rfid_get_by_uid};
 use commands::payments::{payments_list, payments_create};
+use commands::hardware::hardware_trigger_door;
 
 use std::sync::Mutex;
 use tauri::Manager;
@@ -60,6 +63,29 @@ pub fn run() {
             app.manage(DbState(Mutex::new(conn)));
             app.manage(SessionState(Mutex::new(None)));
 
+            // ── Spawn Python Background Service (Sidecar) ──
+            // We'll spawn the venv python directly for development.
+            let mut python_path = std::env::current_dir().unwrap_or_default();
+            if python_path.ends_with("src-tauri") {
+                python_path.pop();
+            }
+            let script_path = python_path.join("src-python").join("main.py");
+            python_path = python_path.join("venv").join("bin").join("python");
+
+            match std::process::Command::new(&python_path)
+                .arg(&script_path)
+                .spawn() 
+            {
+                Ok(child) => {
+                    println!("Successfully spawned python background service (PID: {})", child.id());
+                    // Keep the child alive in state so we can kill it later if needed (or it drops when app exits)
+                    app.manage(PythonProcess(Mutex::new(Some(child))));
+                }
+                Err(e) => {
+                    eprintln!("Failed to spawn python background service: {}", e);
+                }
+            }
+
             Ok(())
         })
 
@@ -81,6 +107,7 @@ pub fn run() {
             members_create,
             members_update,
             members_delete,
+            members_set_embedding,
             dashboard_stats,
             // License
             license_get_fingerprint,
@@ -101,6 +128,8 @@ pub fn run() {
             // Payments
             payments_list,
             payments_create,
+            // Hardware
+            hardware_trigger_door,
         ])
 
         .run(tauri::generate_context!())

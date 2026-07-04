@@ -45,6 +45,7 @@ export const Commands = {
   MEMBERS_CREATE:          "members_create",
   MEMBERS_UPDATE:          "members_update",
   MEMBERS_DELETE:          "members_delete",
+  MEMBERS_SET_EMBEDDING:   "members_set_embedding",
 
   // Plans
   PLANS_LIST:              "plans_list",

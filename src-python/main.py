@@ -36,6 +36,7 @@ import cv2
 import numpy as np
 import websockets
 import websockets.server
+import face_recognition
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 
@@ -114,9 +115,6 @@ class FaceRecognitionService:
     def __init__(self) -> None:
         self.store = EmbeddingStore()
         self.cap: Optional[cv2.VideoCapture] = None
-        self._face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"  # type: ignore[attr-defined]
-        )
 
     def start_camera(self, index: int = CAMERA_INDEX) -> bool:
         self.cap = cv2.VideoCapture(index)
@@ -146,10 +144,30 @@ class FaceRecognitionService:
         return base64.b64encode(buffer.tobytes()).decode("ascii")
 
     def detect_faces(self, frame: np.ndarray) -> list[tuple[int, int, int, int]]:
-        """Detect face bounding boxes using Haar cascade."""
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = self._face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80))
-        return [(int(x), int(y), int(w), int(h)) for (x, y, w, h) in faces] if len(faces) else []
+        """Detect face bounding boxes using face_recognition."""
+        # face_recognition uses RGB instead of BGR (OpenCV default)
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # Returns (top, right, bottom, left)
+        locations = face_recognition.face_locations(rgb_frame, model="hog")
+        
+        # Convert to (x, y, w, h) for drawing
+        faces = []
+        for (top, right, bottom, left) in locations:
+            faces.append((left, top, right - left, bottom - top))
+        return faces
+
+    def extract_embedding(self, frame: np.ndarray, face_location: tuple[int, int, int, int]) -> Optional[np.ndarray]:
+        """Extract 128D embedding for a given face location."""
+        # Convert (x, y, w, h) back to (top, right, bottom, left)
+        (x, y, w, h) = face_location
+        top, right, bottom, left = y, x + w, y + h, x
+        
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        encodings = face_recognition.face_encodings(rgb_frame, [(top, right, bottom, left)])
+        
+        if encodings:
+            return encodings[0]
+        return None
 
     def draw_detections(
         self, frame: np.ndarray, faces: list[tuple[int, int, int, int]], label: str = ""
@@ -194,11 +212,39 @@ async def handle_client(
             label = ""
 
             if faces:
-                # TODO Milestone 4: Extract real embedding with face_recognition library
-                # and compare against store. For now we send an "unknown" event.
-                label = "Detecting..."
-                await websocket.send(json.dumps({"type": "unknown", "confidence": 0.0}))
-
+                # Use the largest face if multiple detected (simplification for check-in terminal)
+                faces.sort(key=lambda f: f[2]*f[3], reverse=True)
+                primary_face = faces[0]
+                
+                embedding = service.extract_embedding(frame, primary_face)
+                
+                if embedding is not None:
+                    match = service.store.find_match(embedding, threshold=0.92) # cosine similarity threshold
+                    if match:
+                        member_id, confidence = match
+                        # Send detected event
+                        label = f"Match ({confidence*100:.1f}%)"
+                        await websocket.send(json.dumps({
+                            "type": "detected", 
+                            "member_id": member_id, 
+                            "name": member_id, # Can be enhanced to map member_id to name
+                            "confidence": confidence
+                        }))
+                    else:
+                        label = "Unknown Face"
+                        await websocket.send(json.dumps({"type": "unknown", "confidence": 0.0}))
+                else:
+                    label = "Analyzing..."
+                
+                # Check if we need to extract for registration
+                if getattr(websocket, "capture_next", False) and embedding is not None:
+                    websocket.capture_next = False
+                    await websocket.send(json.dumps({
+                        "type": "extracted_embedding",
+                        "embedding": embedding.tolist()
+                    }))
+            
+            # Draw all detected faces
             annotated = service.draw_detections(frame, faces, label)
             b64 = service.frame_to_jpeg_b64(annotated)
             await websocket.send(json.dumps({"type": "frame", "data": b64}))
@@ -218,6 +264,9 @@ async def handle_client(
                     service.store.add(msg["member_id"], msg["embedding"])
                 case "remove_embedding":
                     service.store.remove(msg["member_id"])
+                case "extract_embedding":
+                    # Flag to capture the next valid face
+                    websocket.capture_next = True
                 case "shutdown":
                     logger.info("Shutdown requested by client")
                     return

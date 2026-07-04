@@ -7,3 +7,4 @@ pub mod plans;
 pub mod subscriptions;
 pub mod rfids;
 pub mod payments;
+pub mod hardware;

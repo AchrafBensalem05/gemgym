@@ -12,6 +12,7 @@ import { Scan, Camera, CameraOff, UserCheck, AlertTriangle } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
+import { tauriInvoke, Commands } from "@/lib/tauri";
 
 const WS_URL = "ws://127.0.0.1:8765";
 
@@ -39,10 +40,23 @@ export function FaceRfidPage() {
           // React to frame data
           setFrameUrl(`data:image/jpeg;base64,${msg.data}`);
         } else if (msg.type === "detected" || msg.type === "unknown") {
-          setLastDetection({
-            label: msg.type === "detected" ? msg.name : "Unknown Face",
-            confidence: msg.confidence,
-            time: new Date(),
+          const now = new Date();
+          
+          setLastDetection(prev => {
+            // Only trigger door if it's a known face and we haven't triggered for them in the last 3 seconds
+            if (msg.type === "detected") {
+              const timeSinceLast = prev ? now.getTime() - prev.time.getTime() : 9999;
+              if (prev?.label !== msg.name || timeSinceLast > 3000) {
+                // Trigger the door relay!
+                tauriInvoke(Commands.HARDWARE_TRIGGER_DOOR).catch(console.error);
+              }
+            }
+            
+            return {
+              label: msg.type === "detected" ? msg.name : "Unknown Face",
+              confidence: msg.confidence,
+              time: now,
+            };
           });
         }
       } catch (err) {

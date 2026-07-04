@@ -25,7 +25,14 @@ pub fn initialize_database(db_path: &Path) -> SqlResult<Connection> {
 /// Run all schema migration SQL statements.
 /// Migrations are idempotent — safe to re-run on every startup.
 fn run_migrations(conn: &Connection) -> SqlResult<()> {
-    conn.execute_batch(MIGRATION_V1)
+    conn.execute_batch(MIGRATION_V1)?;
+    
+    // V2: Add face_embedding column (ignore error if column already exists)
+    let _ = conn.execute_batch(
+        "ALTER TABLE members ADD COLUMN face_embedding TEXT;"
+    );
+
+    Ok(())
 }
 
 /// Initial schema — creates all 18 entities.

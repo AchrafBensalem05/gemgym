@@ -29,6 +29,7 @@ pub struct MemberRow {
     pub active_subscription_id: Option<String>,
     pub plan_name: Option<String>,
     pub subscription_end: Option<String>,
+    pub face_embedding: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -81,7 +82,7 @@ fn fetch_member_by_id(conn: &rusqlite::Connection, id: &str) -> rusqlite::Result
                 m.phone_encrypted, m.date_of_birth, m.joined_date, m.status,
                 m.photo_path, m.active_subscription_id,
                 mp.name as plan_name, s.end_date as subscription_end,
-                m.created_at, m.updated_at
+                m.face_embedding, m.created_at, m.updated_at
          FROM members m
          LEFT JOIN subscriptions s ON m.active_subscription_id = s.id
          LEFT JOIN membership_plans mp ON s.plan_id = mp.id
@@ -107,8 +108,9 @@ fn map_member_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemberRow> {
         active_subscription_id:row.get(9)?,
         plan_name:             row.get(10)?,
         subscription_end:      row.get(11)?,
-        created_at:            row.get(12)?,
-        updated_at:            row.get(13)?,
+        face_embedding:        row.get(12)?,
+        created_at:            row.get(13)?,
+        updated_at:            row.get(14)?,
     })
 }
 
@@ -159,7 +161,7 @@ pub async fn members_list(
                 m.phone_encrypted, m.date_of_birth, m.joined_date, m.status,
                 m.photo_path, m.active_subscription_id,
                 mp.name as plan_name, s.end_date as subscription_end,
-                m.created_at, m.updated_at
+                m.face_embedding, m.created_at, m.updated_at
          FROM members m
          LEFT JOIN subscriptions s ON m.active_subscription_id = s.id
          LEFT JOIN membership_plans mp ON s.plan_id = mp.id
@@ -280,6 +282,30 @@ pub async fn members_delete(
     let rows = conn.execute(
         "UPDATE members SET status = 'inactive', updated_at = ?1 WHERE id = ?2",
         rusqlite::params![now, id],
+    ).map_err(|e| e.to_string())?;
+
+    if rows == 0 {
+        return Err(format!("Member {} not found", id));
+    }
+    Ok(())
+}
+
+/// Set the face embedding for a member.
+#[tauri::command]
+pub async fn members_set_embedding(
+    id: String,
+    embedding: Vec<f64>,
+    db: State<'_, DbState>,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let now = Utc::now().to_rfc3339();
+
+    // Serialize embedding to JSON string
+    let embedding_json = serde_json::to_string(&embedding).map_err(|e| e.to_string())?;
+
+    let rows = conn.execute(
+        "UPDATE members SET face_embedding = ?1, updated_at = ?2 WHERE id = ?3",
+        rusqlite::params![embedding_json, now, id],
     ).map_err(|e| e.to_string())?;
 
     if rows == 0 {
