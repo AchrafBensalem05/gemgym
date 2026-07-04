@@ -57,18 +57,45 @@ gemgym/
 
 ### Prerequisites
 
-- Node.js ≥ 18
-- Rust (stable) — install via [rustup.rs](https://rustup.rs)
-- Tauri CLI v2 dependencies — see [Tauri Prerequisites](https://tauri.app/start/prerequisites/)
-- Python 3.11+ (for face recognition service)
+Before you begin, ensure your system has the following installed:
+1. **Node.js** (v18 or higher)
+2. **Rust** (stable) — install via [rustup.rs](https://rustup.rs)
+3. **Tauri CLI v2 dependencies** — see [Tauri Prerequisites](https://tauri.app/start/prerequisites/)
+4. **Python 3.11+** (for the face recognition sidecar service)
+5. **CMake** (required for compiling `dlib` during Python setup)
 
-### Development
+### Step-by-Step Setup Guide
 
+#### 1. Clone the Repository
+Clone the project from GitHub and navigate into the directory:
 ```bash
-# Install npm dependencies
-npm install
+git clone https://github.com/AchrafBensalem05/gemgym.git
+cd gemgym
+```
 
-# Run the Tauri dev server
+#### 2. Install Node Dependencies
+Install all frontend and Tauri CLI dependencies:
+```bash
+npm install
+```
+
+#### 3. Setup Python Virtual Environment (Face Recognition Service)
+The app uses a Python sidecar for heavy ML tasks (like facial recognition). You need to create a virtual environment and install its dependencies:
+```bash
+# Create virtual environment
+python3 -m venv venv
+
+# Activate it (Mac/Linux)
+source venv/bin/activate
+# Windows: venv\Scripts\activate
+
+# Install dependencies (may take a few minutes to build dlib)
+pip install -r src-python/requirements.txt
+```
+
+#### 4. Run the Application in Development Mode
+Once both the Node modules and Python environment are ready, run the Tauri dev server. The Tauri backend will automatically spawn the Python sidecar:
+```bash
 npm run tauri dev
 ```
 
@@ -84,9 +111,9 @@ Password: admin
 ## Milestones
 
 - [x] **M1**: Project Setup, Design System, Global Components, Router, Auth UI
-- [ ] **M2**: Full Auth (Argon2), DB initialization, RBAC, Member CRUD
-- [ ] **M3**: Subscriptions, Payments, RFID
-- [ ] **M4**: Attendance, Face Recognition, Door Controller
+- [x] **M2**: Full Auth (Argon2), DB initialization, RBAC, Member CRUD
+- [x] **M3**: Subscriptions, Payments, RFID
+- [x] **M4**: Attendance, Face Recognition, Door Controller
 - [ ] **M5**: POS, Inventory, Expenses
 - [ ] **M6**: Reports, Audit Logs, Backups, Settings, Licensing
 
