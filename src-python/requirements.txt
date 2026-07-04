@@ -1,0 +1,16 @@
+# GemGym Face Recognition Service — Python Dependencies
+# Install: pip install -r requirements.txt
+# Development: python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+
+# WebSocket server
+websockets==12.0
+
+# Computer vision
+opencv-python==4.10.0.84
+
+# Numerical computing
+numpy==1.26.4
+
+# Face recognition (Milestone 4 — requires cmake + dlib)
+face-recognition==1.3.0
+dlib==19.24.2
